@@ -25,6 +25,9 @@
 package io.github.opencubicchunks.cubicchunks.core.util;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,19 +35,28 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
 import io.github.opencubicchunks.cubicchunks.api.world.ICubicWorld;
+import io.github.opencubicchunks.cubicchunks.api.world.ICubicWorldServer;
 import io.github.opencubicchunks.cubicchunks.core.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.core.asm.mixin.ICubicWorldInternal;
 import io.github.opencubicchunks.cubicchunks.core.asm.mixin.fixes.common.fakeheight.IASMEventHandler;
 import io.github.opencubicchunks.cubicchunks.core.asm.mixin.fixes.common.fakeheight.IEventBus;
+import io.github.opencubicchunks.cubicchunks.core.worldgen.generator.vanilla.VanillaCompatibilityGenerator;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.ChunkPrimer;
 import net.minecraft.world.gen.IChunkGenerator;
+import net.minecraft.world.gen.structure.StructureBoundingBox;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.terraingen.DecorateBiomeEvent;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
@@ -55,6 +67,8 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 import net.minecraftforge.fml.common.eventhandler.EventBus;
 import net.minecraftforge.fml.common.eventhandler.IEventListener;
 import net.minecraftforge.fml.common.eventhandler.ListenerList;
+
+import javax.annotation.Nonnull;
 
 public class CompatHandler {
 
@@ -190,6 +204,15 @@ public class CompatHandler {
         return postEventPerModFakeHeight(event.getWorld(), event, MinecraftForge.EVENT_BUS, POPULATE_EVENT_PRE_FAKE_HEIGHT);
     }
 
+    public static void carveRiverValleysAhead(World world, int chunkX, int chunkZ) {
+        if (StreamsRiverValleys.INSTANCE == null || world.isRemote || world.provider.getDimension() != 0
+                || !((ICubicWorld) world).isCubicWorld()
+                || !(((ICubicWorldServer) world).getCubeGenerator() instanceof VanillaCompatibilityGenerator)) {
+            return;
+        }
+        StreamsRiverValleys.INSTANCE.carve((WorldServer) world, chunkX, chunkZ);
+    }
+
     public static boolean postBiomeDecorateWithFakeWorldHeight(DecorateBiomeEvent.Decorate event) {
         if (!(MinecraftForge.EVENT_BUS instanceof IEventBus)) {
             MinecraftForge.EVENT_BUS.post(event);
@@ -303,5 +326,149 @@ public class CompatHandler {
         }
 
         return newList.toArray(new IEventListener[0]);
+    }
+
+    private static final class StreamsRiverValleys {
+
+        private static final StreamsRiverValleys INSTANCE = Loader.isModLoaded("streams") ? resolve() : null;
+
+        private final Method surfaceWaterGenerator;
+        private final Method invalidWorldTypes;
+        private final Method setContains;
+        private final Method generate;
+        private final Method structures;
+        private final Method riverKey;
+        private final Method mapGet;
+        private final Method optionIsDefined;
+        private final Method optionGet;
+        private final Method boundingBox;
+        private final Field generating;
+        private final Class<?> fixedFlowBlock;
+        private final Map<World, Set<Long>> carved = new WeakHashMap<>();
+
+        private StreamsRiverValleys(Class<?> rivers) throws ReflectiveOperationException {
+            surfaceWaterGenerator = rivers.getMethod("surfaceWaterGenerator");
+            invalidWorldTypes = rivers.getMethod("invalidWorldTypes");
+            setContains = Class.forName("scala.collection.GenSetLike").getMethod("contains", Object.class);
+            generate = rivers.getMethod("generate", WorldServer.class, int.class, int.class, ChunkPrimer.class);
+            structures = rivers.getMethod("structures");
+            riverKey = rivers.getMethod("riverKey", int.class, int.class);
+            mapGet = Class.forName("scala.collection.GenMapLike").getMethod("get", Object.class);
+            Class<?> option = Class.forName("scala.Option");
+            optionIsDefined = option.getMethod("isDefined");
+            optionGet = option.getMethod("get");
+            boundingBox = Class.forName("farseek.world.gen.Bounded").getMethod("boundingBox");
+            generating = rivers.getSuperclass().getDeclaredField("generating");
+            generating.setAccessible(true);
+            fixedFlowBlock = Class.forName("streams.block.FixedFlowBlock");
+        }
+
+        private static StreamsRiverValleys resolve() {
+            try {
+                return new StreamsRiverValleys(Class.forName("streams.world.gen.structure.RiverGenerator"));
+            } catch (ReflectiveOperationException e) {
+                CubicChunks.LOGGER.error("Streams river generator not resolved, river valleys will not be carved ahead of population", e);
+                return null;
+            }
+        }
+
+        void carve(WorldServer world, int chunkX, int chunkZ) {
+            Object rivers = call(surfaceWaterGenerator, null);
+            if (rivers == null || (boolean) call(setContains, call(invalidWorldTypes, rivers), world.getWorldType())) {
+                return;
+            }
+            Set<Long> done = carved.computeIfAbsent(world, w -> new HashSet<>());
+            for (int dx = 0; dx <= 1; dx++) {
+                for (int dz = 0; dz <= 1; dz++) {
+                    carveColumn(world, rivers, done, chunkX + dx, chunkZ + dz);
+                }
+            }
+        }
+
+        private void carveColumn(WorldServer world, Object rivers, Set<Long> done, int x, int z) {
+            long key = ChunkPos.asLong(x, z);
+            if (done.contains(key)) {
+                return;
+            }
+            Object river = plotted(rivers, x, z);
+            if ((river != null && !touches(river, x, z)) || isGenerating(rivers)) {
+                return;
+            }
+            setGenerating(rivers, true);
+            try {
+                call(generate, rivers, world, x, z, new ColumnPrimer(world.getChunk(x, z), fixedFlowBlock));
+            } finally {
+                setGenerating(rivers, false);
+            }
+            river = plotted(rivers, x, z);
+            if (river != null && touches(river, x, z)) {
+                done.add(key);
+            }
+        }
+
+        private Object plotted(Object rivers, int x, int z) {
+            Object known = call(mapGet, call(structures, rivers), call(riverKey, rivers, x, z));
+            return (boolean) call(optionIsDefined, known) ? call(optionGet, known) : null;
+        }
+
+        private boolean touches(Object river, int x, int z) {
+            if (!(boolean) call(optionIsDefined, river)) {
+                return false;
+            }
+            StructureBoundingBox box = (StructureBoundingBox) call(boundingBox, call(optionGet, river));
+            return box.intersectsWith(x << 4, z << 4, (x << 4) + 15, (z << 4) + 15);
+        }
+
+        private boolean isGenerating(Object rivers) {
+            try {
+                return generating.getBoolean(rivers);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        private void setGenerating(Object rivers, boolean value) {
+            try {
+                generating.setBoolean(rivers, value);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        private static Object call(Method method, Object target, Object... args) {
+            try {
+                return method.invoke(target, args);
+            } catch (InvocationTargetException e) {
+                Throwables.throwIfUnchecked(e.getCause());
+                throw new RuntimeException(e.getCause());
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    private static final class ColumnPrimer extends ChunkPrimer {
+
+        private final Chunk column;
+        private final Class<?> keep;
+
+        ColumnPrimer(Chunk column, Class<?> keep) {
+            this.column = column;
+            this.keep = keep;
+        }
+
+        @Override
+        @Nonnull
+        public IBlockState getBlockState(int x, int y, int z) {
+            return column.getBlockState(x, y, z);
+        }
+
+        @Override
+        public void setBlockState(int x, int y, int z, @Nonnull IBlockState state) {
+            if (keep.isInstance(column.getBlockState(x, y, z).getBlock())) {
+                return;
+            }
+            column.getWorld().setBlockState(new BlockPos((column.x << 4) + x, y, (column.z << 4) + z), state, 2 | 16);
+        }
     }
 }

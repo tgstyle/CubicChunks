@@ -52,6 +52,7 @@ public class MixinForgeEventFactory {
     @Overwrite(remap = false)
     public static void onChunkPopulate(boolean pre, IChunkGenerator gen, World world, Random rand, int x, int z, boolean hasVillageGenerated) {
         if (pre) {
+            CompatHandler.carveRiverValleysAhead(world, x, z);
             CompatHandler.postChunkPopulatePreWithFakeWorldHeight(new PopulateChunkEvent.Pre(gen, world, rand, x, z, hasVillageGenerated));
         } else {
             MinecraftForge.EVENT_BUS.post(new PopulateChunkEvent.Post(gen, world, rand, x, z, hasVillageGenerated));
