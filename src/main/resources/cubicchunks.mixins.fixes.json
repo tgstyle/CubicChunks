@@ -25,7 +25,6 @@
         "common.MixinEntityLivingBase",
         "common.MixinEntityMinecart_KillFix",
         "common.MixinItemChorusFruit",
-        "common.MixinItemMap",
         "common.MixinNetHandlerPlayServer",
         "common.MixinPacketBufferBlockPosWrite",
         "common.MixinPathNavigateGround",
