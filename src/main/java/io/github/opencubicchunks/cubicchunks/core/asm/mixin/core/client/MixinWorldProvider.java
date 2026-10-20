@@ -61,6 +61,13 @@ public abstract class MixinWorldProvider {
         }
     }
 
+    @Inject(method = "getHorizon", at = @At(value = "HEAD"), cancellable = true, remap = false)
+    private void getHorizon_injectReplace(CallbackInfoReturnable<Double> cir) {
+        if (cubicWorld().isCubicWorld()) {
+            cir.setReturnValue((double) cubicWorld().getMinHeight());
+        }
+    }
+
     private ICubicWorld cubicWorld() {
         return (ICubicWorld) this.world;
     }
