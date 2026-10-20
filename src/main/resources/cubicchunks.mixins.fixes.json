@@ -24,6 +24,7 @@
         "common.MixinEntityFallingBlock_HeightLimits",
         "common.MixinEntityLivingBase",
         "common.MixinEntityMinecart_KillFix",
+        "common.MixinExplosionIC2",
         "common.MixinItemChorusFruit",
         "common.MixinNetHandlerPlayServer",
         "common.MixinPacketBufferBlockPosWrite",
