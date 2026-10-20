@@ -33,7 +33,9 @@ import gnu.trove.set.TIntSet;
 import gnu.trove.set.hash.TIntHashSet;
 import io.github.opencubicchunks.cubicchunks.api.util.CubePos;
 import io.github.opencubicchunks.cubicchunks.core.CubicChunks;
+import io.github.opencubicchunks.cubicchunks.core.asm.mixin.ICubicWorldInternal;
 import io.github.opencubicchunks.cubicchunks.core.client.CubeProviderClient;
+import io.github.opencubicchunks.cubicchunks.core.lighting.ILightingManager;
 import io.github.opencubicchunks.cubicchunks.core.util.AddressTools;
 import io.github.opencubicchunks.cubicchunks.core.world.ClientHeightMap;
 import io.github.opencubicchunks.cubicchunks.core.world.IColumnInternal;
@@ -52,7 +54,6 @@ import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
-import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 
 @MethodsReturnNonnullByDefault
@@ -131,7 +132,7 @@ public class PacketCubeBlockChange implements IMessage {
 
     public static class Handler extends AbstractClientMessageHandler<PacketCubeBlockChange> {
 
-        @Nullable @Override
+        @Override
         public void handleClientMessage(World world, EntityPlayer player, PacketCubeBlockChange packet, MessageContext ctx) {
             WorldClient worldClient = (WorldClient) world;
             CubeProviderClient cubeCache = (CubeProviderClient) worldClient.getChunkProvider();
@@ -143,19 +144,25 @@ public class PacketCubeBlockChange implements IMessage {
                 return;
             }
 
-            ClientHeightMap index = (ClientHeightMap) cube.getColumn().getOpacityIndex();
-            for (int hmapUpdate : packet.heightValues) {
-                int x = hmapUpdate & 0xF;
-                int z = (hmapUpdate >> 4) & 0xF;
-                //height is signed, so don't use unsigned shift
-                int height = hmapUpdate >> 8;
-                index.setHeight(x, z, height);
-            }
             // apply the update
             for (int i = 0; i < packet.localAddresses.length; i++) {
                 BlockPos pos = cube.localAddressToBlockPos(packet.localAddresses[i]);
                 worldClient.invalidateBlockReceiveRegion(pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ());
                 worldClient.setBlockState(pos, packet.blockStates[i], 3);
+            }
+
+            ClientHeightMap index = (ClientHeightMap) cube.getColumn().getOpacityIndex();
+            ILightingManager lm = ((ICubicWorldInternal.Client) worldClient).getLightingManager();
+            for (int hmapUpdate : packet.heightValues) {
+                int x = hmapUpdate & 0xF;
+                int z = (hmapUpdate >> 4) & 0xF;
+                //height is signed, so don't use unsigned shift
+                int height = hmapUpdate >> 8;
+                int oldHeight = index.getTopBlockY(x, z);
+                index.setHeight(x, z, height);
+                if (oldHeight != height) {
+                    lm.updateLightBetween(cube.getColumn(), x, oldHeight, height, z);
+                }
             }
             cube.getTileEntityMap().values().forEach(TileEntity::updateContainingBlockInfo);
         }
