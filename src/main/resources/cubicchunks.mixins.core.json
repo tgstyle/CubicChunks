@@ -31,6 +31,7 @@
         "common.MixinPlayerList",
         "common.MixinRegionFileCache",
         "common.MixinStructureStart",
+        "common.MixinTileEntityStructure",
         "common.MixinWorld",
         "common.MixinWorld_HeightLimits",
         "common.MixinWorld_LightOrder",
