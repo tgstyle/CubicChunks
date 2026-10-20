@@ -24,7 +24,6 @@
  */
 package io.github.opencubicchunks.cubicchunks.core.network;
 
-import static io.github.opencubicchunks.cubicchunks.api.util.Coords.blockToLocal;
 import static net.minecraftforge.fml.common.network.ByteBufUtils.readVarInt;
 
 import gnu.trove.TShortCollection;
@@ -87,7 +86,7 @@ public class PacketCubeBlockChange implements IMessage {
         TIntIterator it = xzAddresses.iterator();
         while (it.hasNext()) {
             int v = it.next();
-            int height = ((IColumnInternal) cube.getColumn()).getTopYWithStaging(blockToLocal(v), blockToLocal(v));
+            int height = ((IColumnInternal) cube.getColumn()).getTopYWithStaging(AddressTools.getLocalX(v), AddressTools.getLocalZ(v));
             v |= height << 8;
             heightValues[i] = v;
             i++;

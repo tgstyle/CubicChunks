@@ -302,14 +302,33 @@ public class LightingHooks {
 
     public static void initSkylightForSection(final World world, final Chunk chunk, final ExtendedBlockStorage section) {
         if (world.provider.hasSkyLight()) {
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
                     if (((IColumnInternal) chunk).getTopYWithStaging(x, z) < section.getYLocation()) {
                         for (int y = 0; y < 16; ++y) {
                             section.setSkyLight(x, y, z, EnumSkyBlock.SKY.defaultLightValue);
                         }
+                        scheduleRelightChecksBesideColumn(world, chunk, x, z, section.getYLocation(), pos);
                     }
                 }
+            }
+        }
+    }
+
+    private static void scheduleRelightChecksBesideColumn(final World world, final Chunk chunk, final int localX, final int localZ,
+            final int minY, final BlockPos.MutableBlockPos pos) {
+        final int maxY = minY + 15;
+        for (final EnumFacing dir : EnumFacing.HORIZONTALS) {
+            final int x = localToBlock(chunk.x, localX + dir.getXOffset());
+            final int z = localToBlock(chunk.z, localZ + dir.getZOffset());
+            final Chunk nChunk = world.getChunkProvider().getLoadedChunk(blockToCube(x), blockToCube(z));
+            if (nChunk == null) {
+                continue;
+            }
+            final int nTop = ((IColumnInternal) nChunk).getTopYWithStaging(blockToLocal(x), blockToLocal(z));
+            for (int y = Math.min(maxY, nTop); y >= minY; --y) {
+                world.checkLightFor(EnumSkyBlock.SKY, pos.setPos(x, y, z));
             }
         }
     }
