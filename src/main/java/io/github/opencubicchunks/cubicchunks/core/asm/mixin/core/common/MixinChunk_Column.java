@@ -45,6 +45,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 import javax.annotation.ParametersAreNonnullByDefault;
+import java.util.Arrays;
 import java.util.Collection;
 
 /**
@@ -84,6 +85,8 @@ public abstract class MixinChunk_Column {
 
     @Shadow @Final private int[] heightMap;
 
+    @Shadow @Final private int[] precipitationHeightMap;
+
     public ICube chunk$getLoadedCube(int cubeY) {
         if (cachedCube != null && cachedCube.getY() == cubeY) {
             return cachedCube;
@@ -102,6 +105,7 @@ public abstract class MixinChunk_Column {
 
     public void chunk$addCube(ICube cube) {
         this.cubeMap.put((Cube) cube);
+        Arrays.fill(precipitationHeightMap, -999);
     }
 
 
@@ -109,6 +113,7 @@ public abstract class MixinChunk_Column {
         if (cachedCube != null && cachedCube.getY() == cubeY) {
             cubicChunks$invalidateCachedCube();
         }
+        Arrays.fill(precipitationHeightMap, -999);
         return this.cubeMap.remove(cubeY);
     }
 

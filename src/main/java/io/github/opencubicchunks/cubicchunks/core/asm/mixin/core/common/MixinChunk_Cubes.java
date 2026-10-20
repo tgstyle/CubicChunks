@@ -47,6 +47,7 @@ import io.github.opencubicchunks.cubicchunks.core.world.cube.BlankCube;
 import io.github.opencubicchunks.cubicchunks.core.world.cube.Cube;
 import mcp.MethodsReturnNonnullByDefault;
 import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.tileentity.TileEntity;
@@ -115,6 +116,7 @@ public abstract class MixinChunk_Cubes {
     @Shadow @Final @Mutable private Map<BlockPos, TileEntity> tileEntities;
 
     @Shadow @Final private int[] heightMap;
+    @Shadow @Final private int[] precipitationHeightMap;
     @Shadow @Final private World world;
     @Shadow private boolean loaded;
     @Shadow private boolean ticked;
@@ -872,10 +874,45 @@ public abstract class MixinChunk_Cubes {
     @Inject(method = "getPrecipitationHeight", at = @At(value = "HEAD"), cancellable = true)
     private void getPrecipitationHeight_CubicChunks_Replace(BlockPos pos, CallbackInfoReturnable<BlockPos> cbi) {
         if (isColumn) {
-            // TODO: precipitationHeightMap
-            BlockPos ret = new BlockPos(pos.getX(), ((IColumn) this).getHeightValue(blockToLocal(pos.getX()), pos.getY(), blockToLocal(pos.getZ())), pos.getZ());
-            cbi.setReturnValue(ret);
+            int localX = blockToLocal(pos.getX());
+            int localZ = blockToLocal(pos.getZ());
+            int height = precipitationHeightMap[localX | localZ << 4];
+            if (height == -999) {
+                height = findPrecipitationHeight_CubicChunks(localX, pos.getY(), localZ);
+                precipitationHeightMap[localX | localZ << 4] = height;
+            }
+            cbi.setReturnValue(new BlockPos(pos.getX(), height, pos.getZ()));
         }
+    }
+
+    @Unique private int findPrecipitationHeight_CubicChunks(int localX, int blockY, int localZ) {
+        int lightTop = ((IColumn) this).getHeightValue(localX, blockY, localZ);
+        int highest = Integer.MIN_VALUE;
+        for (Cube cube : cubeMap) {
+            if (cube.getY() > highest) {
+                highest = cube.getY();
+            }
+        }
+        if (highest == Integer.MIN_VALUE) {
+            return lightTop;
+        }
+        for (Cube cube : cubeMap.cubes(highest, blockToCube(lightTop))) {
+            ExtendedBlockStorage storage = cube.getStorage();
+            if (storage == null || storage.isEmpty()) {
+                continue;
+            }
+            for (int y = Cube.SIZE - 1; y >= 0; y--) {
+                int blockPosY = Coords.cubeToMinBlock(cube.getY()) + y;
+                if (blockPosY < lightTop) {
+                    return lightTop;
+                }
+                Material material = storage.get(localX, y, localZ).getMaterial();
+                if (material.blocksMovement() || material.isLiquid()) {
+                    return blockPosY + 1;
+                }
+            }
+        }
+        return lightTop;
     }
 
     // ==============================================
