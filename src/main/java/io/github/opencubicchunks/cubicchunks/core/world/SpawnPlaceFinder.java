@@ -109,7 +109,7 @@ public final class SpawnPlaceFinder {
             CubicChunks.LOGGER.trace("Found minPos {} and maxPos {}", minPos, maxPos);
         }
         if (minPos == null || maxPos == null) {
-            CubicChunks.LOGGER.error("No suitable spawn found, using original input {} (min={}, max={})", pos, minPos, maxPos);
+            CubicChunks.LOGGER.trace("No suitable spawn found, using original input {} (min={}, max={})", pos, minPos, maxPos);
             return pos;
         }
         assert findNonEmpty(world, maxPos) == null && findNonEmpty(world, minPos) != null;
@@ -142,28 +142,28 @@ public final class SpawnPlaceFinder {
     private static BlockPos findMinPos(World world, BlockPos pos) {
         // go down twice as much each time until we hit filled space
         double dy = Cube.SIZE;
-        while (findNonEmpty(world, inWorldUp(world, pos, -dy)) == null) {
-            if (dy > Integer.MAX_VALUE) {
+        while (findNonEmpty(world, inGenerationUp(world, pos, -dy)) == null) {
+            if (dy > Integer.MAX_VALUE || inGenerationUp(world, pos, -dy).getY() <= ((ICubicWorld) world).getMinGenerationHeight()) {
                 CubicChunks.LOGGER.trace("Error finding spawn point: can't find solid start height at {}", pos);
                 return null;
             }
             dy *= 2;
         }
-        return inWorldUp(world, pos, -dy);
+        return inGenerationUp(world, pos, -dy);
     }
 
     @Nullable
     private static BlockPos findMaxPos(World world, BlockPos pos) {
         // go up twice as much each time until we hit empty space
         double dy = Cube.SIZE;
-        while (findNonEmpty(world, inWorldUp(world, pos, dy)) != null) {
-            if (dy > Integer.MAX_VALUE) {
+        while (findNonEmpty(world, inGenerationUp(world, pos, dy)) != null) {
+            if (dy > Integer.MAX_VALUE || inGenerationUp(world, pos, dy).getY() >= ((ICubicWorld) world).getMaxGenerationHeight()) {
                 CubicChunks.LOGGER.trace("Error finding spawn point: can't find non-solid end height at {}", pos);
                 return null;
             }
             dy *= 2;
         }
-        return inWorldUp(world, pos, dy);
+        return inGenerationUp(world, pos, dy);
     }
 
     @Nullable
@@ -181,9 +181,9 @@ public final class SpawnPlaceFinder {
         return null;
     }
 
-    private static BlockPos inWorldUp(World world, BlockPos original, double up) {
+    private static BlockPos inGenerationUp(World world, BlockPos original, double up) {
         int y = (int) (original.getY() + up);
-        y = MathHelper.clamp(y, ((ICubicWorld) world).getMinHeight(), ((ICubicWorld) world).getMaxHeight());
+        y = MathHelper.clamp(y, ((ICubicWorld) world).getMinGenerationHeight(), ((ICubicWorld) world).getMaxGenerationHeight());
         return new BlockPos(original.getX(), y, original.getZ());
     }
 }
