@@ -39,6 +39,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.IBlockAccess;
+import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -133,6 +134,7 @@ public class FirstLightProcessor {
                         }
                     }
                 }
+                checkStoredSkylightBelowTop(lm, cube, localX, localZ, height);
 
                 Pair<Integer, Integer> minMax = getMinMaxLightUpdateY(cube, localX, localZ);
                 int min = minMax == null ? Integer.MAX_VALUE : minMax.getLeft();
@@ -173,6 +175,21 @@ public class FirstLightProcessor {
                         throw new IllegalStateException("Check light failed at " + this.mutablePos + "!");
                     }
                 }
+            }
+        }
+    }
+
+    private void checkStoredSkylightBelowTop(ILightingManager lm, ICube cube, int localX, int localZ, int height) {
+        ExtendedBlockStorage storage = cube.getStorage();
+        if (storage == null) {
+            return;
+        }
+        int minCubeBlockY = cube.getCoords().getMinBlockY();
+        int maxY = Math.min(height - 1, cube.getCoords().getMaxBlockY());
+        for (int yPos = minCubeBlockY; yPos <= maxY; yPos++) {
+            if (storage.getSkyLight(localX, yPos - minCubeBlockY, localZ) != 0) {
+                mutablePos.setY(yPos);
+                lm.checkLightFor(EnumSkyBlock.SKY, mutablePos);
             }
         }
     }
