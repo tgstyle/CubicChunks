@@ -105,6 +105,7 @@ public class CubicChunksCoreMod implements IFMLLoadingPlugin {
     public static void initMixin() {
         MixinBootstrap.init();
         Mixins.addConfiguration("cubicchunks.mixins.core.json");
+        Mixins.addConfiguration("cubicchunks.mixins.lightcompat.json");
         if (PlatformCompatUtils.isHybridEnv()) {
             Mixins.addConfiguration("cubicchunks.mixins.core_sided.bukkit.json");
             System.out.println("Running in Forge+Bukkit hybrid environment, using compatibility mixins");

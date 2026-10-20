@@ -30,9 +30,15 @@ import io.github.opencubicchunks.cubicchunks.core.util.AddressTools;
 import io.github.opencubicchunks.cubicchunks.core.world.cube.Cube;
 import net.minecraft.network.PacketBuffer;
 import net.minecraft.world.chunk.ChunkPrimer;
+import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
+
+import javax.annotation.Nullable;
 
 public interface IColumnInternal extends IColumn {
     ChunkPrimer getCompatGenerationPrimer();
+
+    @Nullable
+    ExtendedBlockStorage getStorageForCube(int cubeY);
 
     void removeFromStagingHeightmap(ICube cube);
 

@@ -33,6 +33,7 @@
         "common.MixinStructureStart",
         "common.MixinWorld",
         "common.MixinWorld_HeightLimits",
+        "common.MixinWorld_LightOrder",
         "common.MixinWorld_Tick",
         "common.MixinWorldEntitySpawner",
         "common.MixinWorldInfo",

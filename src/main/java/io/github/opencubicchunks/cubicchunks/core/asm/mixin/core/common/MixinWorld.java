@@ -260,14 +260,6 @@ public abstract class MixinWorld implements ICubicWorldInternal {
     }
 
 
-    @Inject(method = "checkLightFor", at = @At("HEAD"), cancellable = true)
-    private void checkLightFor(EnumSkyBlock lightType, BlockPos pos, CallbackInfoReturnable<Boolean> ci) {
-        if (!isCubicWorld()) {
-            return;
-        }
-        ci.setReturnValue(getLightingManager().checkLightFor(lightType, pos));
-    }
-
     /**
      * @param pos block position
      * @param unusedTileEntity tile entity instance, unused

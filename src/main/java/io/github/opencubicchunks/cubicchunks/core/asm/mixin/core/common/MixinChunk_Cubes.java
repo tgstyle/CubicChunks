@@ -261,6 +261,11 @@ public abstract class MixinChunk_Cubes {
         return compatGenerationPrimer;
     }
 
+    @Nullable
+    public ExtendedBlockStorage chunk_internal$getStorageForCube(int cubeY) {
+        return getEBS_CubicChunks(cubeY);
+    }
+
     // private ExtendedBlockStorage getLastExtendedBlockStorage() - shouldn't be used by anyone
 
     // this method can't be saved by just redirecting EBS access
@@ -348,17 +353,6 @@ public abstract class MixinChunk_Cubes {
         }
     }
 
-    // ==============================================
-    //                 recheckGaps
-    // ==============================================
-
-    @Inject(method = "recheckGaps", at = @At(value = "HEAD"), cancellable = true)
-    private void recheckGaps_CubicChunks_Replace(boolean p_150803_1_, CallbackInfo cbi) {
-        if (isColumn) {
-            cbi.cancel();
-        }
-    }
-
     // private void checkSkylightNeighborHeight(int x, int z, int maxValue) - shouldn't be used by anyone
 
     // private void updateSkylightNeighborHeight(int x, int z, int startY, int endY) - shouldn't be used by anyone
@@ -408,14 +402,6 @@ public abstract class MixinChunk_Cubes {
             return instance.getLightFor(type, pos);
         }
         return 0;
-    }
-    
-    // make relightBlock no-op for cubic chunks, handles by injection above
-    @Inject(method = "relightBlock", at = @At(value = "HEAD"), cancellable = true)
-    private void relightBlock_CubicChunks_Replace(int x, int y, int z, CallbackInfo cbi) {
-        if (isColumn) {
-            cbi.cancel();
-        }
     }
 
     // ==============================================
@@ -520,29 +506,6 @@ public abstract class MixinChunk_Cubes {
     }
 
     // ==============================================
-    //                 getLightFor
-    // ==============================================
-
-    @Inject(method = "getLightFor", at = @At("HEAD"), cancellable = true)
-    private void replacedGetLightForCC(EnumSkyBlock type, BlockPos pos, CallbackInfoReturnable<Integer> cir) {
-        if (!isColumn) {
-            return;
-        }
-        ((ICubicWorldInternal) world).getLightingManager().onGetLight(type, pos);
-        cir.setReturnValue(((Cube) ((IColumn) this).getCube(blockToCube(pos.getY()))).getCachedLightFor(type, pos));
-    }
-
-    @Nullable
-    @Redirect(method = "getLightFor", at = @At(
-            value = "FIELD",
-            target = "Lnet/minecraft/world/chunk/Chunk;storageArrays:[Lnet/minecraft/world/chunk/storage/ExtendedBlockStorage;",
-            args = "array=get"
-    ))
-    private ExtendedBlockStorage getLightFor_CubicChunks_EBSGetRedirect(ExtendedBlockStorage[] array, int index) {
-        return getEBS_CubicChunks(index);
-    }
-
-    // ==============================================
     //               LIGHTING HOOKS
     // ==============================================
 
@@ -558,6 +521,20 @@ public abstract class MixinChunk_Cubes {
     // ==============================================
     //                 setLightFor
     // ==============================================
+
+    @Inject(method = "setLightFor", at = @At("HEAD"), cancellable = true)
+    private void setLightFor_CubicChunks_createEBS(EnumSkyBlock type, BlockPos pos, int value, CallbackInfo cbi) {
+        if (!isColumn) {
+            return;
+        }
+        int cubeY = blockToCube(pos.getY());
+        if (getEBS_CubicChunks(cubeY) == null) {
+            setEBS_CubicChunks(cubeY, new ExtendedBlockStorage(Coords.cubeToMinBlock(cubeY), world.provider.hasSkyLight()));
+        }
+        if (getEBS_CubicChunks(cubeY) == null) {
+            cbi.cancel();
+        }
+    }
 
     @Redirect(method = "setLightFor", at = @At(
             value = "FIELD",
@@ -970,18 +947,6 @@ public abstract class MixinChunk_Cubes {
     private void setStorageArrays_CubicChunks_NotSupported(ExtendedBlockStorage[] newStorageArrays, CallbackInfo cbi) {
         if (isColumn) {
             throw new UnsupportedOperationException("setting storage arrays it not supported with cubic chunks");
-        }
-    }
-
-    // ==============================================
-    //                  checkLight
-    // ==============================================
-
-    @Inject(method = "checkLight()V", at = @At(value = "HEAD"), cancellable = true)
-    private void checkLight_CubicChunks_NotSupported(CallbackInfo cbi) {
-        if (isColumn) {
-            // we use FirstLightProcessor instead
-            cbi.cancel();
         }
     }
 
