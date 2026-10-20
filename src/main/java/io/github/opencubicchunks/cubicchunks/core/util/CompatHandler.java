@@ -24,6 +24,9 @@
  */
 package io.github.opencubicchunks.cubicchunks.core.util;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -32,6 +35,7 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,6 +45,8 @@ import java.util.stream.Collectors;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
+import io.github.opencubicchunks.cubicchunks.api.world.CubeWatchEvent;
+import io.github.opencubicchunks.cubicchunks.api.world.ICube;
 import io.github.opencubicchunks.cubicchunks.api.world.ICubicWorld;
 import io.github.opencubicchunks.cubicchunks.api.world.ICubicWorldServer;
 import io.github.opencubicchunks.cubicchunks.core.CubicChunks;
@@ -49,6 +55,9 @@ import io.github.opencubicchunks.cubicchunks.core.asm.mixin.fixes.common.fakehei
 import io.github.opencubicchunks.cubicchunks.core.asm.mixin.fixes.common.fakeheight.IEventBus;
 import io.github.opencubicchunks.cubicchunks.core.worldgen.generator.vanilla.VanillaCompatibilityGenerator;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
@@ -67,6 +76,7 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 import net.minecraftforge.fml.common.eventhandler.EventBus;
 import net.minecraftforge.fml.common.eventhandler.IEventListener;
 import net.minecraftforge.fml.common.eventhandler.ListenerList;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 import javax.annotation.Nonnull;
 
@@ -118,7 +128,84 @@ public class CompatHandler {
                 new ChunkEvent.Load(uninitializedChunk).getListenerList(),
                 MinecraftForge.EVENT_BUS, FAKE_CHUNK_LOAD
         );
+        if (Loader.isModLoaded("forgemultipartcbe")) {
+            try {
+                MinecraftForge.EVENT_BUS.register(new MultipartCubeDescriptions());
+            } catch (ReflectiveOperationException e) {
+                CubicChunks.LOGGER.error("Failed to initialize Forge Multipart cube descriptions", e);
+            }
+        }
     }
+
+    public static class MultipartCubeDescriptions {
+
+        private final Class<?> container;
+        private final MethodHandle tag;
+        private final MethodHandle createFromNBT;
+        private final MethodHandle notifyTileChange;
+        private final MethodHandle getDescPacket;
+        private final MethodHandle sendToPlayer;
+
+        MultipartCubeDescriptions() throws ReflectiveOperationException {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            container = Class.forName("codechicken.multipart.handler.MultipartSaveLoad$TileNBTContainer");
+            Class<?> tileMultipart = Class.forName("codechicken.multipart.TileMultipart");
+            Class<?> packetHandler = Class.forName("codechicken.multipart.handler.MultipartSPH");
+            Class<?> packetCustom = Class.forName("codechicken.lib.packet.PacketCustom");
+            tag = lookup.findVirtual(container, "tag", MethodType.methodType(NBTTagCompound.class))
+                    .asType(MethodType.methodType(NBTTagCompound.class, TileEntity.class));
+            createFromNBT = lookup.findStatic(tileMultipart, "createFromNBT", MethodType.methodType(tileMultipart, NBTTagCompound.class))
+                    .asType(MethodType.methodType(TileEntity.class, NBTTagCompound.class));
+            notifyTileChange = lookup.findVirtual(tileMultipart, "notifyTileChange", MethodType.methodType(void.class))
+                    .asType(MethodType.methodType(void.class, TileEntity.class));
+            getDescPacket = lookup.findStatic(packetHandler, "getDescPacket", MethodType.methodType(packetCustom, Chunk.class, Iterator.class))
+                    .asType(MethodType.methodType(Object.class, Chunk.class, Iterator.class));
+            sendToPlayer = lookup.findVirtual(packetCustom, "sendToPlayer", MethodType.methodType(void.class, EntityPlayer.class))
+                    .asType(MethodType.methodType(void.class, Object.class, EntityPlayer.class));
+        }
+
+        @SubscribeEvent
+        public void onCubeWatch(CubeWatchEvent event) {
+            ICube cube = event.getCube();
+            if (cube == null || cube.getTileEntityMap().isEmpty()) {
+                return;
+            }
+            try {
+                for (TileEntity tile : new ArrayList<>(cube.getTileEntityMap().values())) {
+                    if (container.isInstance(tile)) {
+                        convert(tile);
+                    }
+                }
+                Chunk column = cube.getColumn();
+                Iterator<TileEntity> tiles = cube.getTileEntityMap().values().iterator();
+                Object packet = (Object) getDescPacket.invokeExact(column, tiles);
+                if (packet != null) {
+                    sendToPlayer.invokeExact(packet, (EntityPlayer) event.getPlayer());
+                }
+            } catch (Throwable throwable) {
+                Throwables.throwIfUnchecked(throwable);
+                throw new RuntimeException(throwable);
+            }
+        }
+
+        private void convert(TileEntity saved) throws Throwable {
+            NBTTagCompound nbt = (NBTTagCompound) tag.invokeExact(saved);
+            if (nbt == null) {
+                return;
+            }
+            World world = saved.getWorld();
+            BlockPos pos = saved.getPos();
+            TileEntity tile = (TileEntity) createFromNBT.invokeExact(nbt);
+            if (tile == null) {
+                world.setBlockToAir(pos);
+                return;
+            }
+            tile.validate();
+            world.setTileEntity(pos, tile);
+            notifyTileChange.invokeExact(tile);
+        }
+    }
+
     private static Map<String, String> getPackageToModId() {
         return Collections.unmodifiableMap(Loader.instance().getActiveModList().stream()
                 .flatMap(mod -> mod.getOwnedPackages().stream().map(pkg -> new AbstractMap.SimpleEntry<>(pkg, mod.getModId())))
