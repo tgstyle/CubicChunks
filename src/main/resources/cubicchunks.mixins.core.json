@@ -16,7 +16,6 @@
         "common.IBlockStateContainer",
         "common.IForgeChunkManager",
         "common.IGameRegistry",
-        "common.IIntegratedServer",
         "common.IPlayerChunkMapEntry",
         "common.MixinAnvilSaveHandler",
         "common.MixinChunk_Column",
@@ -67,7 +66,8 @@
         "client.MixinViewFrustum_RenderHeightFix",
         "client.MixinWorld_HeightLimits",
         "client.MixinWorldClient",
-        "client.MixinWorldProvider"
+        "client.MixinWorldProvider",
+        "common.IIntegratedServer"
     ],
     "server": [
         "server.MixinDedicatedServer_HeightLimits",

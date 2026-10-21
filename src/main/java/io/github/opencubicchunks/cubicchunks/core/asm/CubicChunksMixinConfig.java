@@ -29,11 +29,14 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
 
+import net.minecraft.launchwrapper.Launch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.objectweb.asm.tree.ClassNode;
@@ -54,11 +57,22 @@ public class CubicChunksMixinConfig implements IMixinConfigPlugin {
 
     @Nonnull
     public static Logger LOGGER = LogManager.getLogger("CubicChunksMixinConfig");
+    private static final Set<String> MOD_TARGETS = new HashSet<>(Arrays.asList(
+            "ic2/core/ExplosionIC2",
+            "micdoodle8/mods/galacticraft/api/vector/BlockVec3",
+            "micdoodle8/mods/galacticraft/api/prefab/entity/EntitySpaceshipBase",
+            "micdoodle8/mods/galacticraft/core/entities/EntityLanderBase",
+            "micdoodle8/mods/galacticraft/core/fluid/ThreadFindSeal",
+            "micdoodle8/mods/galacticraft/core/TransformerHooks"));
     private final Object2BooleanMap<String> modDependencyConditions = new Object2BooleanLinkedOpenHashMap<String>();
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
     public void onLoad(String mixinPackage) {
+        modDependencyConditions.defaultReturnValue(true);
+        if (mixinPackage.endsWith(".fixes")) {
+            return;
+        }
         OptifineState optifineState;
         String optifineVersion = System.getProperty("cubicchunks.optifineVersion", null);
         if (optifineVersion == null) {
@@ -90,7 +104,6 @@ public class CubicChunksMixinConfig implements IMixinConfigPlugin {
             optifineState = OptifineState.LOADED_E1;
         }
 
-        modDependencyConditions.defaultReturnValue(true);
         modDependencyConditions.put(
                 "io.github.opencubicchunks.cubicchunks.core.asm.mixin.selectable.client.MixinRenderGlobalNoOptifine",
                 optifineState == OptifineState.NOT_LOADED);
@@ -164,7 +177,15 @@ public class CubicChunksMixinConfig implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        String target = targetClassName.replace('.', '/');
+        if (MOD_TARGETS.contains(target) && classMissing(target)) {
+            return false;
+        }
         return this.shouldApplyMixin(mixinClassName);
+    }
+
+    private static boolean classMissing(String path) {
+        return Launch.classLoader.getResource(path + ".class") == null;
     }
 
     public boolean shouldApplyMixin(String mixinClassName) {
