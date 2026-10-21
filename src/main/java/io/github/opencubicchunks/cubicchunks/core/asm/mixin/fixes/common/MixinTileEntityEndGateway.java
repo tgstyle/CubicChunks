@@ -26,6 +26,7 @@ package io.github.opencubicchunks.cubicchunks.core.asm.mixin.fixes.common;
 
 import io.github.opencubicchunks.cubicchunks.core.world.cube.Cube;
 import io.github.opencubicchunks.cubicchunks.api.world.IColumn;
+import io.github.opencubicchunks.cubicchunks.api.world.ICube;
 import io.github.opencubicchunks.cubicchunks.api.world.ICubicWorld;
 import io.github.opencubicchunks.cubicchunks.core.world.cube.Cube;
 import mcp.MethodsReturnNonnullByDefault;
@@ -36,6 +37,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
@@ -49,21 +51,29 @@ public class MixinTileEntityEndGateway {
     @Redirect(method = "findExitPortal", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/chunk/Chunk;getTopFilledSegment()I"))
     private int getChunkTopFilledSegmentExitFromPortal(Chunk chunk) {
-        int top = chunk.getTopFilledSegment();
-        if (top < 0) {
-            return 0;
-        }
-        return top;
+        return getTopFilledSegment_CubicChunks(chunk);
     }
 
     @Redirect(method = "findSpawnpointInChunk", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/chunk/Chunk;getTopFilledSegment()I"))
     private static int getChunkTopFilledSegmentFindSpawnpoint(Chunk chunk) {
+        return getTopFilledSegment_CubicChunks(chunk);
+    }
+
+    @Unique private static int getTopFilledSegment_CubicChunks(Chunk chunk) {
         int top = chunk.getTopFilledSegment();
         if (top < 0) {
             return 0;
         }
-        return top;
+        if (!((ICubicWorld) chunk.getWorld()).isCubicWorld()) {
+            return top;
+        }
+        for (ICube cube : ((IColumn) chunk).getLoadedCubes()) {
+            if (!cube.isEmpty()) {
+                return top;
+            }
+        }
+        return 0;
     }
 
     /**
