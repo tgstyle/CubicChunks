@@ -257,7 +257,8 @@ public class ClientEventHandler {
                 enableCC.y = b.y;
                 enableCC.width = c.width;
                 enableCC.height = c.height;
-                enableCC.visible = mapTypeButton.visible;
+                boolean isCubicChunksType = WorldType.WORLD_TYPES[((IGuiCreateWorld) gui).getSelectedIndex()] instanceof ICubicWorldType;
+                enableCC.visible = !isCubicChunksType && mapTypeButton.visible;
 
                 refreshText(gui, enableCC);
             }));
