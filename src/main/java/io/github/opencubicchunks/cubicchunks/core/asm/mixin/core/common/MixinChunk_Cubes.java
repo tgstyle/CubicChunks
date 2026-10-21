@@ -50,6 +50,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
+import net.minecraft.init.Blocks;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.ClassInheritanceMultiMap;
 import net.minecraft.util.math.AxisAlignedBB;
@@ -134,6 +135,8 @@ public abstract class MixinChunk_Cubes {
     private boolean isColumn = false;
 
     private ChunkPrimer compatGenerationPrimer;
+    @Unique private boolean compatArraysFilled_CubicChunks;
+    @Unique private boolean compatTemplate_CubicChunks;
 
     @Shadow public abstract byte[] getBiomeArray();
 
@@ -151,6 +154,10 @@ public abstract class MixinChunk_Cubes {
     // TODO: make cube an interface, use the implementation only here
     @Unique @Nullable
     private ExtendedBlockStorage getEBS_CubicChunks(int index) {
+        if (compatTemplate_CubicChunks) {
+            fillCompatArrays_CubicChunks();
+            return index >= 0 && index < 16 ? storageArrays[index] : NULL_BLOCK_STORAGE;
+        }
         if (!isColumn) {
             // vanilla case, subtract minHeight for extended height support
             return storageArrays[index - Coords.blockToCube(getWorld().getMinHeight())];
@@ -167,6 +174,13 @@ public abstract class MixinChunk_Cubes {
 
     // setEBS is unlikely to be used extremely frequently, no caching
     @Unique private void setEBS_CubicChunks(int index, ExtendedBlockStorage ebs) {
+        if (compatTemplate_CubicChunks) {
+            fillCompatArrays_CubicChunks();
+            if (index >= 0 && index < 16) {
+                storageArrays[index] = ebs;
+            }
+            return;
+        }
         if (!isColumn) {
             // vanilla case, subtract minHeight for extended height support
             storageArrays[index - Coords.blockToCube(getWorld().getMinHeight())] = ebs;
@@ -250,6 +264,7 @@ public abstract class MixinChunk_Cubes {
     @ModifyConstant(method = "<init>(Lnet/minecraft/world/World;Lnet/minecraft/world/chunk/ChunkPrimer;II)V",
             constant = @Constant(intValue = 16, ordinal = 0), require = 1)
     private int getInitChunkLoopEnd(int _16, World world, ChunkPrimer primer, int x, int z) {
+        this.compatTemplate_CubicChunks = this.isColumn;
         if (((ICubicWorldInternal.Server) world).isCompatGenerationScope()) {
             this.compatGenerationPrimer = primer;
             return -1;
@@ -259,6 +274,56 @@ public abstract class MixinChunk_Cubes {
 
     public ChunkPrimer chunk_internal$getCompatGenerationPrimer() {
         return compatGenerationPrimer;
+    }
+
+    @Unique private void fillCompatArrays_CubicChunks() {
+        if (compatArraysFilled_CubicChunks || compatGenerationPrimer == null) {
+            return;
+        }
+        compatArraysFilled_CubicChunks = true;
+        boolean skylight = world.provider.hasSkyLight();
+        for (int y = 0; y < 256; y++) {
+            for (int localZ = 0; localZ < Cube.SIZE; localZ++) {
+                for (int localX = 0; localX < Cube.SIZE; localX++) {
+                    IBlockState state = compatGenerationPrimer.getBlockState(localX, y, localZ);
+                    if (state == Blocks.AIR.getDefaultState()) {
+                        continue;
+                    }
+                    if (storageArrays[y >> 4] == NULL_BLOCK_STORAGE) {
+                        storageArrays[y >> 4] = new ExtendedBlockStorage(y >> 4 << 4, skylight);
+                    }
+                    storageArrays[y >> 4].set(localX, y & 15, localZ, state);
+                }
+            }
+        }
+    }
+
+    public boolean chunk_internal$isCompatTemplate() {
+        return compatTemplate_CubicChunks;
+    }
+
+    public void chunk_internal$syncCompatGenerationWrites() {
+        if (!compatArraysFilled_CubicChunks) {
+            return;
+        }
+        for (int section = 0; section < 16; section++) {
+            ExtendedBlockStorage storage = storageArrays[section];
+            if (storage == NULL_BLOCK_STORAGE) {
+                continue;
+            }
+            for (int localY = 0; localY < Cube.SIZE; localY++) {
+                for (int localZ = 0; localZ < Cube.SIZE; localZ++) {
+                    for (int localX = 0; localX < Cube.SIZE; localX++) {
+                        int y = (section << 4) + localY;
+                        IBlockState held = storage.get(localX, localY, localZ);
+                        if (compatGenerationPrimer.getBlockState(localX, y, localZ) != held) {
+                            compatGenerationPrimer.setBlockState(localX, y, localZ, held);
+                        }
+                    }
+                }
+            }
+        }
+        compatArraysFilled_CubicChunks = false;
     }
 
     @Nullable
@@ -271,7 +336,7 @@ public abstract class MixinChunk_Cubes {
     // this method can't be saved by just redirecting EBS access
     @Inject(method = "getTopFilledSegment", at = @At(value = "HEAD"), cancellable = true)
     private void getTopFilledSegment_CubicChunks(CallbackInfoReturnable<Integer> cbi) {
-        if (!isColumn) {
+        if (!isColumn || compatTemplate_CubicChunks) {
             return;
         }
         int blockY = Coords.NO_HEIGHT;
@@ -386,7 +451,7 @@ public abstract class MixinChunk_Cubes {
             int localX, int y, int localZ, int packedXZ, int oldHeightValue, IBlockState oldState, Block newBlock, Block oldBlock,
             int oldOpacity, ExtendedBlockStorage ebs, boolean createdNewEbsAboveTop, int newOpacity) {
 
-        if (isColumn && ((IColumn) this).getCube(blockToCube(y)).isInitialLightingDone()) {
+        if (isColumn && !compatTemplate_CubicChunks && ((IColumn) this).getCube(blockToCube(y)).isInitialLightingDone()) {
             if (oldHeightValue == y + 1) { // oldHeightValue is the previous block Y above the top block, so this is the "removing to block" case
                 getWorld().getLightingManager().doOnBlockSetLightUpdates((Chunk) (Object) this, localX, getHeightValue(localX, localZ), y, localZ);
             } else {
@@ -410,7 +475,7 @@ public abstract class MixinChunk_Cubes {
 
     @Redirect(method = "getBlockLightOpacity(III)I", at = @At(value = "FIELD", target = "Lnet/minecraft/world/chunk/Chunk;loaded:Z"))
     private boolean getBlockLightOpacity_isChunkLoadedCubeRedirect(Chunk chunk, int x, int y, int z) {
-        if (!isColumn) {
+        if (!isColumn || compatTemplate_CubicChunks) {
             return loaded;
         }
         ICube cube = ((IColumn) this).getLoadedCube(blockToCube(y));
@@ -455,7 +520,7 @@ public abstract class MixinChunk_Cubes {
     @Inject(method = "setBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/storage/ExtendedBlockStorage;set"
             + "(IIILnet/minecraft/block/state/IBlockState;)V", shift = At.Shift.AFTER))
     private void onEBSSet_setBlockState_setOpacity(BlockPos pos, IBlockState state, CallbackInfoReturnable<IBlockState> cir) {
-        if (!isColumn) {
+        if (!isColumn || compatTemplate_CubicChunks) {
             return;
         }
         this.dirty = true;
@@ -491,14 +556,14 @@ public abstract class MixinChunk_Cubes {
         args = "array=set"
     ), cancellable = true)
     private void setBlockState_CubicChunks_EBSSetInject(BlockPos pos, IBlockState state, CallbackInfoReturnable<IBlockState> cir) {
-        if (isColumn && getWorld().getCubeCache().getLoadedCube(CubePos.fromBlockCoords(pos)) == null) {
+        if (isColumn && !compatTemplate_CubicChunks && getWorld().getCubeCache().getLoadedCube(CubePos.fromBlockCoords(pos)) == null) {
             cir.setReturnValue(null);
         }
     }
     
     @Redirect(method = "setBlockState", at = @At(value = "FIELD", target = "Lnet/minecraft/world/chunk/Chunk;dirty:Z"))
     private void setIsModifiedFromSetBlockState_Field(Chunk chunk, boolean isModifiedIn, BlockPos pos, IBlockState state) {
-        if (isColumn) {
+        if (isColumn && !compatTemplate_CubicChunks) {
             getWorld().getCubeFromBlockCoords(pos).markDirty();
         } else {
             dirty = isModifiedIn;
@@ -557,7 +622,7 @@ public abstract class MixinChunk_Cubes {
 
     @Redirect(method = "setLightFor", at = @At(value = "FIELD", target = "Lnet/minecraft/world/chunk/Chunk;dirty:Z"))
     private void setIsModifiedFromSetLightFor_Field(Chunk chunk, boolean isModifiedIn, EnumSkyBlock type, BlockPos pos, int value) {
-        if (isColumn) {
+        if (isColumn && !compatTemplate_CubicChunks) {
             getWorld().getCubeFromBlockCoords(pos).markDirty();
         } else {
             dirty = isModifiedIn;
@@ -706,6 +771,20 @@ public abstract class MixinChunk_Cubes {
     // ==============================================
     //                addTileEntity
     // ==============================================
+
+    @Inject(method = "getTileEntity", at = @At("HEAD"), cancellable = true)
+    private void getTileEntity_CompatTemplate(BlockPos pos, Chunk.EnumCreateEntityType creationMode, CallbackInfoReturnable<TileEntity> cir) {
+        if (compatTemplate_CubicChunks) {
+            cir.setReturnValue(null);
+        }
+    }
+
+    @Inject(method = "addTileEntity(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/tileentity/TileEntity;)V", at = @At("HEAD"), cancellable = true)
+    private void addTileEntity_CompatTemplate(BlockPos pos, TileEntity tileEntityIn, CallbackInfo cbi) {
+        if (compatTemplate_CubicChunks) {
+            cbi.cancel();
+        }
+    }
 
     @Redirect(method = "addTileEntity(Lnet/minecraft/tileentity/TileEntity;)V",
             at = @At(value = "FIELD", target = "Lnet/minecraft/world/chunk/Chunk;loaded:Z"))

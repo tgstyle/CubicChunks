@@ -36,6 +36,7 @@ import io.github.opencubicchunks.cubicchunks.core.CubicChunksConfig;
 import io.github.opencubicchunks.cubicchunks.core.asm.mixin.ICubicWorldInternal;
 import io.github.opencubicchunks.cubicchunks.core.asm.mixin.core.common.IGameRegistry;
 import io.github.opencubicchunks.cubicchunks.core.util.CompatHandler;
+import io.github.opencubicchunks.cubicchunks.core.util.GalacticraftCompat;
 import io.github.opencubicchunks.cubicchunks.core.world.IColumnInternal;
 import io.github.opencubicchunks.cubicchunks.core.world.cube.Cube;
 import io.github.opencubicchunks.cubicchunks.core.worldgen.WorldgenHangWatchdog;
@@ -242,6 +243,7 @@ public class VanillaCompatibilityGenerator implements ICubeGenerator {
                                 CubicChunks.LOGGER.error("Optimized compatibility generation failed, disabling...");
                                 CubicChunksConfig.optimizedCompatibilityGenerator = false;
                             } else {
+                                ((IColumnInternal) lastChunk).syncCompatGenerationWrites();
                                 replaceBedrock(chunkPrimer, rand);
                             }
                         }
@@ -389,6 +391,9 @@ public class VanillaCompatibilityGenerator implements ICubeGenerator {
         long chunkSeed = (xSeed * x + zSeed * z) ^ worldSeed;
 
         for (IWorldGenerator generator : generators) {
+            if (GalacticraftCompat.blocksGenerator(world, generator)) {
+                continue;
+            }
             fmlRandom.setSeed(chunkSeed);
             try {
                 CompatHandler.beforeGenerate(world, generator);

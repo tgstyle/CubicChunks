@@ -53,7 +53,6 @@ import io.github.opencubicchunks.cubicchunks.core.world.IColumnInternal;
 import io.github.opencubicchunks.cubicchunks.core.world.chunkloader.ICubicTicketInternal;
 import mcp.MethodsReturnNonnullByDefault;
 import net.minecraft.block.Block;
-import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.init.Blocks;
@@ -232,7 +231,7 @@ public class Cube implements ICube {
                 for (int x = 0; x < Cube.SIZE; x++) {
                     IBlockState newstate = primer.getBlockState(x, y, z);
 
-                    if (newstate.getMaterial() != Material.AIR) {
+                    if (newstate != Blocks.AIR.getDefaultState()) {
                         if (storage == NULL_STORAGE) {
                             newStorage();
                         }

@@ -39,6 +39,9 @@
         "common.fakeheight.MixinBiomeDecorator",
         "common.fakeheight.MixinForgeEventFactory",
         "common.fakeheight.MixinTerrainGen",
+        "common.galacticraft.MixinBlockVec3",
+        "common.galacticraft.MixinEntitySpaceshipBase",
+        "common.galacticraft.MixinThreadFindSeal",
         "common.isblockloaded.MixinEntity",
         "common.vanillaclient.INetHandlerPlayServer",
         "common.vanillaclient.MixinNetHandlerPlayServer",
@@ -91,6 +94,8 @@
     "client": [
         "client.MixinEntity_PrepareSpawn",
         "client.MixinEntityPlayerSP",
+        "client.galacticraft.MixinEntitySpaceshipBaseSync",
+        "client.galacticraft.MixinTransformerHooks",
         "client.isblockloaded.MixinEntity"
     ],
     "server": []

@@ -79,7 +79,7 @@ public abstract class MixinChunk_LightCompat {
 
     @Inject(method = "getLightFor", at = @At("HEAD"), cancellable = true)
     private void replacedGetLightForCC(EnumSkyBlock type, BlockPos pos, CallbackInfoReturnable<Integer> cir) {
-        if (!isColumn_LightCompat()) {
+        if (!isColumn_LightCompat() || ((IColumnInternal) this).isCompatTemplate()) {
             return;
         }
         ((ICubicWorldInternal) world).getLightingManager().onGetLight(type, pos);

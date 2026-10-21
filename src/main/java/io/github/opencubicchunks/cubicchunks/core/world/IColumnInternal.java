@@ -37,6 +37,13 @@ import javax.annotation.Nullable;
 public interface IColumnInternal extends IColumn {
     ChunkPrimer getCompatGenerationPrimer();
 
+    default boolean isCompatTemplate() {
+        return false;
+    }
+
+    default void syncCompatGenerationWrites() {
+    }
+
     @Nullable
     ExtendedBlockStorage getStorageForCube(int cubeY);
 

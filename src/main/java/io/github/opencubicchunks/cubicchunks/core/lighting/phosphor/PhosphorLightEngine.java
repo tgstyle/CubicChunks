@@ -34,6 +34,7 @@ import io.github.opencubicchunks.cubicchunks.api.world.ICube;
 import io.github.opencubicchunks.cubicchunks.api.world.ICubeProvider;
 import io.github.opencubicchunks.cubicchunks.core.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.core.lighting.phosphor.LightingHooks.EnumBoundaryFacing;
+import io.github.opencubicchunks.cubicchunks.core.util.GalacticraftCompat;
 import io.github.opencubicchunks.cubicchunks.core.world.IColumnInternal;
 import io.github.opencubicchunks.cubicchunks.core.world.cube.Cube;
 import net.minecraft.block.state.IBlockState;
@@ -624,7 +625,7 @@ public class PhosphorLightEngine {
             }
         }
 
-        return MathHelper.clamp(state.getLightValue(this.world, this.curPos), 0, MAX_LIGHT);
+        return MathHelper.clamp(GalacticraftCompat.lightValue(state, this.world, this.curPos), 0, MAX_LIGHT);
     }
 
     private int getPosOpacity(final BlockPos pos, final IBlockState state) {
