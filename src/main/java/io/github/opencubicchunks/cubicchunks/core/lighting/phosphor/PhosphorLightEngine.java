@@ -285,6 +285,10 @@ public class PhosphorLightEngine {
         this.queueIt = this.initialBrightenings.iterator();
 
         while (this.nextItem()) {
+            if (this.curCube == null) {
+                continue;
+            }
+
             final int newLight = this.curDataVal;
 
             if (newLight > this.getCursorCachedLight(lightType)) {
@@ -296,6 +300,10 @@ public class PhosphorLightEngine {
         this.queueIt = this.initialDarkenings.iterator();
 
         while (this.nextItem()) {
+            if (this.curCube == null) {
+                continue;
+            }
+
             final int oldLight = this.getCursorCachedLight(lightType);
 
             if (oldLight != 0) {
@@ -313,6 +321,10 @@ public class PhosphorLightEngine {
             this.queueIt = this.queuedDarkenings[curLight].iterator();
 
             while (this.nextItem()) {
+                if (this.curCube == null) {
+                    continue;
+                }
+
                 if (this.getCursorCachedLight(lightType) >= curLight) { //don't darken if we got brighter due to some other change
                     continue;
                 }
@@ -373,6 +385,10 @@ public class PhosphorLightEngine {
             this.queueIt = this.queuedBrightenings[curLight].iterator();
 
             while (this.nextItem()) {
+                if (this.curCube == null) {
+                    continue;
+                }
+
                 final int oldLight = this.getCursorCachedLight(lightType);
 
                 if (oldLight == curLight) { //only process this if nothing else has happened at this position since scheduling
