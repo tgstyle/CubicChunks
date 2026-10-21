@@ -216,6 +216,10 @@ public class CubeSplitTickSet implements Set<NextTickListEntry> {
                 @Override public NextTickListEntry next() {
                     return it.next().entry;
                 }
+
+                @Override public void remove() {
+                    it.remove();
+                }
             };
         }
 
