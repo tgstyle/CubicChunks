@@ -40,6 +40,8 @@ public class WorldgenHangWatchdog {
 
     public static final boolean ENABLED = "true".equalsIgnoreCase(System.getProperty("cubicchunks.wgen_hang_watchdog", "true"));
 
+    private static final int SAMPLES_KEPT = 40;
+
     private static final WorldgenHangWatchdog INSTANCE = new WorldgenHangWatchdog();
 
     private static final Thread thread = init();
@@ -91,7 +93,7 @@ public class WorldgenHangWatchdog {
         return t;
     }
 
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings("BusyWait")
     private void run() {
         if (!ENABLED) {
             return;
@@ -100,45 +102,65 @@ public class WorldgenHangWatchdog {
             try {
                 Thread.sleep(500);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                CubicChunks.LOGGER.error("WorldGen hang watchdog interrupted", e);
             }
-            synchronized (entries) {
-                for (Iterator<Map.Entry<Thread, Entry>> iterator = entries.entrySet().iterator(); iterator.hasNext(); ) {
-                    Map.Entry<Thread, Entry> entry = iterator.next();
-                    Thread t = entry.getKey();
-                    Entry e = entry.getValue();
+            try {
+                watch();
+            } catch (Throwable oops) {
+                CubicChunks.LOGGER.error("WorldGen hang watchdog failed to report a hang and would have died; it keeps watching instead", oops);
+            }
+        }
+    }
 
+    @SuppressWarnings("deprecation")
+    private static void stop(Thread t) {
+        try {
+            t.stop();
+        } catch (UnsupportedOperationException | LinkageError gone) {
+            CubicChunks.LOGGER.fatal("This Java cannot stop a thread, so the hung world generation above is left to run and the watchdog stops "
+                    + "watching it. Close the world; the samples are the report");
+        }
+    }
+
+    private void watch() {
+        synchronized (entries) {
+            for (Iterator<Map.Entry<Thread, Entry>> iterator = entries.entrySet().iterator(); iterator.hasNext(); ) {
+                Map.Entry<Thread, Entry> entry = iterator.next();
+                Thread t = entry.getKey();
+                Entry e = entry.getValue();
+
+                if (e.samples.size() < SAMPLES_KEPT) {
                     e.samples.add(t.getStackTrace());
+                }
 
-                    long currentTime = System.nanoTime();
+                long currentTime = System.nanoTime();
 
-                    long dt = currentTime - e.startTime;
+                long dt = currentTime - e.startTime;
 
-                    if (dt > TimeUnit.MILLISECONDS.toNanos(CubicChunksConfig.worldgenWatchdogTimeLimit)) {
-                        StringBuilder sb = new StringBuilder();
-                        sb.append("World generation taking ").append(dt / (double) TimeUnit.SECONDS.toNanos(1))
-                                .append(" seconds, should be less than 50ms. Stopping the server.\n");
+                if (dt > TimeUnit.MILLISECONDS.toNanos(CubicChunksConfig.worldgenWatchdogTimeLimit)) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("World generation taking ").append(dt / (double) TimeUnit.SECONDS.toNanos(1))
+                            .append(" seconds, should be less than 50ms. Stopping the server.\n");
 
-                        sb.append("Samples collected during world generation:\n");
-                        int i = 1;
-                        for (StackTraceElement[] stacktrace : e.samples) {
-                            sb.append("--------------------------------------------\n");
+                    sb.append("Samples collected during world generation:\n");
+                    int i = 1;
+                    for (StackTraceElement[] stacktrace : e.samples) {
+                        sb.append("--------------------------------------------\n");
 
-                            Set<String> likelyModsInvolved = CompatHandler.getModsForStacktrace(stacktrace);
-                            sb.append("SAMPLE #").append(i).append(", likely mods involved: ").append(String.join(", ", likelyModsInvolved))
-                                    .append('\n');
-                            for (StackTraceElement traceElement : stacktrace) {
-                                String modid = CompatHandler.getModForStacktraceElement(traceElement);
-                                sb.append("\tat ").append(traceElement).append(" [Likely mod: ").append(modid).append("]\n");
-                            }
-                            i++;
+                        Set<String> likelyModsInvolved = CompatHandler.getModsForStacktrace(stacktrace);
+                        sb.append("SAMPLE #").append(i).append(", likely mods involved: ").append(String.join(", ", likelyModsInvolved))
+                                .append('\n');
+                        for (StackTraceElement traceElement : stacktrace) {
+                            String modid = CompatHandler.getModForStacktraceElement(traceElement);
+                            sb.append("\tat ").append(traceElement).append(" [Likely mod: ").append(modid).append("]\n");
                         }
-                        String msg = sb.toString();
-                        crashInfo = msg;
-                        CubicChunks.LOGGER.fatal(msg);
-                        t.stop();
-                        iterator.remove();
+                        i++;
                     }
+                    String msg = sb.toString();
+                    crashInfo = msg;
+                    iterator.remove();
+                    CubicChunks.LOGGER.fatal(msg);
+                    stop(t);
                 }
             }
         }
