@@ -105,7 +105,8 @@ public class CompatHandler {
     );
 
     private static final Set<String> FAKE_CHUNK_LOAD = ImmutableSet.of(
-            "zerocore"
+            "zerocore",
+            "reborncore"
     );
     private static Set<String> vanillaCompatPopulationFakeHeight = ImmutableSet.of(
             "biomesoplenty" // temporary workaround: biomesoplenty fires population events directly instead of going through forge event factory
