@@ -26,6 +26,7 @@ package io.github.opencubicchunks.cubicchunks.core;
 
 import static io.github.opencubicchunks.cubicchunks.core.util.ReflectionUtil.cast;
 
+import io.github.opencubicchunks.cubicchunks.api.world.ICubicWorldType;
 import io.github.opencubicchunks.cubicchunks.api.world.storage.ICubicStorage;
 import io.github.opencubicchunks.cubicchunks.api.world.storage.StorageFormatProviderBase;
 import io.github.opencubicchunks.cubicchunks.api.worldgen.VanillaCompatibilityGeneratorProviderBase;
@@ -164,7 +165,7 @@ public class CubicChunks {
                 () -> () -> {
                     IIntegratedServer integratedServer = cast(event.getServer());
                     ICubicWorldSettings settings = cast(integratedServer.getWorldSettings());
-                    if (settings.isCubic()) {
+                    if (settings.isCubic() || integratedServer.getWorldSettings().getTerrainType() instanceof ICubicWorldType) {
                         event.getServer().setBuildLimit(CubicChunks.MAX_SUPPORTED_BLOCK_Y);
                     }
                 },
