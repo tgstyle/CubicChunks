@@ -62,6 +62,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
+import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkPrimer;
 import net.minecraft.world.gen.IChunkGenerator;
@@ -70,6 +71,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.terraingen.DecorateBiomeEvent;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
 import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.IWorldGenerator;
 import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.eventhandler.Event;
@@ -134,6 +136,52 @@ public class CompatHandler {
                 MinecraftForge.EVENT_BUS.register(new MultipartCubeDescriptions());
             } catch (ReflectiveOperationException e) {
                 CubicChunks.LOGGER.error("Failed to initialize Forge Multipart cube descriptions", e);
+            }
+        }
+        if (Loader.isModLoaded("customspawner")) {
+            try {
+                MinecraftForge.EVENT_BUS.register(new CustomSpawnerSpawns());
+            } catch (ReflectiveOperationException e) {
+                CubicChunks.LOGGER.error("Failed to initialize Custom Mob Spawner spawn lists", e);
+            }
+        }
+    }
+
+    public static class CustomSpawnerSpawns {
+
+        private final Field spawnBiomes;
+        private final Field spawnEntries;
+
+        CustomSpawnerSpawns() throws ReflectiveOperationException {
+            Class<?> spawner = Class.forName("drzhark.customspawner.CustomSpawner");
+            spawnBiomes = spawner.getField("entityDefaultSpawnBiomes");
+            spawnEntries = spawner.getField("defaultSpawnListEntryMap");
+        }
+
+        @SubscribeEvent
+        @SuppressWarnings("unchecked")
+        public void onPotentialSpawns(WorldEvent.PotentialSpawns event) {
+            int y = event.getPos().getY();
+            if (y >= 0 && y < 256) {
+                return;
+            }
+            World world = event.getWorld();
+            if (world.isRemote || !((ICubicWorld) world).isCubicWorld() || !event.getList().isEmpty()) {
+                return;
+            }
+            try {
+                Biome biome = world.getBiome(event.getPos());
+                Map<String, ? extends List<?>> biomes = (Map<String, ? extends List<?>>) spawnBiomes.get(null);
+                Map<String, ?> entries = (Map<String, ?>) spawnEntries.get(null);
+                for (Map.Entry<String, ? extends List<?>> remembered : biomes.entrySet()) {
+                    Object held = entries.get(remembered.getKey());
+                    if (held instanceof Biome.SpawnListEntry && remembered.getValue().contains(biome)
+                            && event.getType().getCreatureClass().isAssignableFrom(((Biome.SpawnListEntry) held).entityClass)) {
+                        event.getList().add((Biome.SpawnListEntry) held);
+                    }
+                }
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
             }
         }
     }
