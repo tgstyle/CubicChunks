@@ -27,6 +27,7 @@
         "common.MixinEntityTracker",
         "common.MixinEntityTrackerEntry",
         "common.MixinIBlockAccess_MinMaxHeight",
+        "common.MixinItemMap",
         "common.MixinMinecraftServer",
         "common.MixinPlayerList",
         "common.MixinRegionFileCache",
